@@ -28,7 +28,7 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          pip install requests beautifulsoup4
+          pip install requests beautifulsoup4 cloudscraper
 
       - name: Run Scraper (Update JSON) 🕷️
         # ADJUSTED: Script name matches project structure
