@@ -1,38 +1,10 @@
 {
-  "id": 3330,
-  "date": "14-12-2025",
+  "id": 0,
+  "date": "14/12/2025",
   "modes": {
-    "tradicional": [
-      0,
-      25,
-      26,
-      28,
-      34,
-      41
-    ],
-    "laSegunda": [
-      8,
-      17,
-      28,
-      29,
-      35,
-      43
-    ],
-    "revancha": [
-      4,
-      6,
-      16,
-      22,
-      34,
-      36
-    ],
-    "siempreSale": [
-      2,
-      13,
-      31,
-      32,
-      40,
-      43
-    ]
+    "tradicional": [],
+    "laSegunda": [],
+    "revancha": [],
+    "siempreSale": []
   }
 }
