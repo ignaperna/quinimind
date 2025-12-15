@@ -1,0 +1,41 @@
+name: Actualizar Quini 6 DB
+
+on:
+  schedule:
+    # 22:00 ART (UTC-3) = 01:00 UTC next day
+    # Wednesday 22:00 -> Thursday 01:00
+    # Sunday 22:00 -> Monday 01:00
+    - cron: '0 1 * * 1,4'
+  workflow_dispatch:  # Allows manual run
+
+permissions:
+  contents: write
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Run Scraper
+      run: python scrape_quini6.py
+      
+    - name: Commit and Push changes
+      # Only commit if the DB actually changed
+      run: |
+        git config --global user.name "QuiniBot"
+        git config --global user.email "bot@quinimind.com"
+        git add quini6.db
+        git commit -m "Auto-update database [skip ci]" || echo "No changes to commit"
+        git push
