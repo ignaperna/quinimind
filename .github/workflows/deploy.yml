@@ -1,0 +1,66 @@
+name: Update and Deploy QuiniMind
+
+on:
+  # Se ejecuta automáticamente Miércoles y Domingos a las 23:00 UTC (aprox 20:00 ARG)
+  schedule:
+    - cron: '0 23 * * 0,3' 
+  # Permite ejecutarlo manualmente desde la pestaña "Actions"
+  workflow_dispatch:
+
+# PERMISOS CLAVE (Esto soluciona que no se cree la rama)
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Bajar el código
+      - name: Checkout 🛎️
+        uses: actions/checkout@v4
+
+      # 2. Configurar Python y correr el Scraper
+      - name: Set up Python 🐍
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Python Dependencies
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Run Scraper (Update JSON) 🕷️
+        # ADJUSTED: Script name matches project structure
+        run: python scrape_quini6.py
+
+      # 3. Guardar el nuevo JSON en el repositorio (Commit)
+      # Esto es importante para que el historial quede guardado
+      - name: Commit data.json update
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Auto-update: Resultados Quini 6"
+          # ADJUSTED: Path matches where scraper outputs data
+          file_pattern: 'quinimind-frontend/public/data.json'
+
+      # 4. Configurar Node y Construir React (Build)
+      - name: Set up Node.js 📦
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        working-directory: ./quinimind-frontend
+        run: npm ci
+
+      - name: Build Project 🏗️
+        working-directory: ./quinimind-frontend
+        run: npm run build
+
+      # 5. Desplegar a gh-pages
+      # Esta acción creará la rama automáticamente si tiene permisos
+      - name: Deploy to GitHub Pages 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: quinimind-frontend/dist # La carpeta que genera Vite al hacer build
+          branch: gh-pages
