@@ -325,7 +325,7 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const resDraw = await fetch("/data.json");
+        const resDraw = await fetch("./data.json");
 
         if (!resDraw.ok) throw new Error("JSON Feed Error");
 
@@ -381,7 +381,7 @@ export default function App() {
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg flex items-center justify-center gap-3 text-red-200">
-            <AlertTriangle /> Error de conexión con el servidor (Python API). Asegúrate de que `api.py` esté corriendo.
+            <AlertTriangle /> No se pudieron cargar los datos del sorteo. (Error de red o archivo data.json faltante)
           </div>
         )}
 

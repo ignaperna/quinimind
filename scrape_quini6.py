@@ -49,7 +49,8 @@ def run_scraper():
         # 1. Extraer Fecha y Nro de Sorteo
         texto_general = soup.get_text()
         
-        match_id = re.search(r'Sorteo N°\s*(\d+)', texto_general, re.IGNORECASE)
+        # Updated regex to match "Nro. Sorteo: 3330"
+        match_id = re.search(r'(?:Sorteo N°|Nro\. Sorteo:)\s*(\d+)', texto_general, re.IGNORECASE)
         sorteo_id = int(match_id.group(1)) if match_id else 0
         
         match_date = re.search(r'(\d{2}/\d{2}/\d{4})', texto_general)
@@ -72,40 +73,57 @@ def run_scraper():
             "SIEMPRE SALE": "siempreSale"
         }
         
-        all_text_nodes = soup.find_all(text=True)
+        # Strategy: Find the keyword (usually in strong/b/h3), then scan next elements/strings for numbers.
+        # Numbers might be dash separated "05 - 10 - ..." or individual in text pointers.
         
         for key_text, json_key in keywords.items():
-            for node in all_text_nodes:
-                if key_text in node.upper():
-                    parent = node.parent.parent 
-                    numeros_encontrados = []
-                    container = parent.find_next_sibling() or parent
-                    textos_numeros = container.find_all(string=re.compile(r'^\d{2}$'))
+            # Find the element containing the text
+            target_node = soup.find(string=re.compile(re.escape(key_text), re.IGNORECASE))
+            
+            if target_node:
+                # Start searching from this node's parent (e.g. <strong>) forwards
+                # We collect numbers until we hit 6 valid ones or run into another header/stop condition.
+                numeros_encontrados = []
+                
+                # We use next_elements to traverse the document flow
+                current_element = target_node
+                
+                # Guard to prevent infinite loop or searching too far
+                steps = 0
+                max_steps = 50 
+                
+                for element in current_element.next_elements:
+                    steps += 1
+                    if steps > max_steps:
+                        break
                     
-                    for num_str in textos_numeros:
-                        try:
-                            val = int(num_str.strip())
-                            if 0 <= val <= 45 and val not in numeros_encontrados:
-                                numeros_encontrados.append(val)
-                        except:
+                    if isinstance(element, str):
+                        txt = element.strip()
+                        if not txt:
                             continue
-                        if len(numeros_encontrados) == 6:
-                            break
+                        
+                        # Check for dash separated
+                        if '-' in txt:
+                            parts = txt.split('-')
+                            for p in parts:
+                                p_clean = p.strip()
+                                if re.match(r'^\d{1,2}$', p_clean):
+                                    val = int(p_clean)
+                                    if val <= 45 and val not in numeros_encontrados:
+                                        numeros_encontrados.append(val)
+                        # Check for single number
+                        elif re.match(r'^\d{1,2}$', txt):
+                            val = int(txt)
+                            if val <= 45 and val not in numeros_encontrados:
+                                numeros_encontrados.append(val)
                     
-                    if len(numeros_encontrados) < 6:
-                         tables = soup.find_all('table')
-                         for table in tables:
-                             if key_text in table.get_text().upper():
-                                 nums = re.findall(r'\\b\d{2}\\b', table.get_text())
-                                 uniques = []
-                                 for n in nums:
-                                     ni = int(n)
-                                     if ni not in uniques and ni <= 45:
-                                         uniques.append(ni)
-                                 numeros_encontrados = uniques[:6]
-
-                    modes_data[json_key] = sorted(numeros_encontrados)
-                    break
+                    if len(numeros_encontrados) >= 6:
+                        break
+                
+                modes_data[json_key] = sorted(numeros_encontrados[:6])
+                print(f"   -> {key_text}: {modes_data[json_key]}")
+            else:
+                print(f"⚠️ No se encontró la etiqueta para {key_text}")
 
         # 3. Construir JSON Final
         final_data = {
