@@ -26,20 +26,18 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
+import { API_URL, LATEST_DRAW_FEED, MODES } from './lib/constants';
+import { fetchJson } from './lib/api';
+import { frequencyRanking, randomDraw } from './lib/numbers';
 
 // Generate mock history for statistics (Fallback)
 const generateHistory = (count) => {
   const history = [];
   for (let i = 1; i <= count; i++) {
-    const draw = [];
-    while (draw.length < 6) {
-      const num = Math.floor(Math.random() * 46);
-      if (!draw.includes(num)) draw.push(num);
-    }
     history.push({
       id: 3330 - i,
       date: `Sorteo ${3330 - i}`,
-      numbers: draw.sort((a, b) => a - b)
+      numbers: randomDraw()
     });
   }
   return history;
@@ -107,12 +105,7 @@ const ResultsSection = ({ latestDraw, loading }) => {
   if (loading) return <div className="text-center py-10 text-slate-500">Cargando últimos resultados...</div>;
   if (!latestDraw) return null;
 
-  const modes = [
-    { name: "Tradicional", nums: latestDraw.modes.tradicional, color: "text-blue-400" },
-    { name: "La Segunda", nums: latestDraw.modes.laSegunda, color: "text-emerald-400" },
-    { name: "Revancha", nums: latestDraw.modes.revancha, color: "text-amber-400" },
-    { name: "Siempre Sale", nums: latestDraw.modes.siempreSale, color: "text-rose-400" },
-  ];
+  const modes = MODES.map((mode) => ({ ...mode, nums: latestDraw.modes[mode.key] }));
 
   return (
     <div className="space-y-6">
@@ -133,7 +126,7 @@ const ResultsSection = ({ latestDraw, loading }) => {
         {modes.map((mode) => (
           <Card key={mode.name} className="relative overflow-hidden group hover:border-slate-600 transition-colors">
             <div className={`absolute top-0 left-0 w-1 h-full ${mode.color.replace('text', 'bg')}`}></div>
-            <h3 className={`font-semibold mb-4 ${mode.name} text-slate-200`}>{mode.name}</h3>
+            <h3 className="font-semibold mb-4 text-slate-200">{mode.name}</h3>
             <div className="flex justify-between gap-2 flex-wrap">
               {mode.nums && mode.nums.map((n) => (
                 <NumberBall key={n} number={n} type="winning" />
@@ -147,17 +140,14 @@ const ResultsSection = ({ latestDraw, loading }) => {
 };
 
 const StatsSection = ({ history, loading }) => {
-  if (loading) return <div className="text-center text-slate-500">Analizando historial...</div>
-
   // Calculate frequency
   const stats = useMemo(() => {
     if (!history || history.length === 0) return [];
 
-    const frequency = Array(46).fill(0);
-    history.forEach(draw => draw.numbers.forEach(n => frequency[n]++));
-
-    return frequency.map((count, num) => ({ num, count })).sort((a, b) => b.count - a.count);
+    return frequencyRanking(history);
   }, [history]);
+
+  if (loading) return <div className="text-center text-slate-500">Analizando historial...</div>
 
   const top10 = stats.slice(0, 10);
   const bottom10 = [...stats].reverse().slice(0, 10);
@@ -233,9 +223,7 @@ const PredictionEngine = ({ isPro, onUpgrade }) => {
   const generatePrediction = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/predict`);
-      const data = await res.json();
-      setPrediction(data);
+      setPrediction(await fetchJson(`${API_URL}/predict`));
     } catch (err) {
       console.error(err);
     } finally {
@@ -325,13 +313,7 @@ export default function App() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const resDraw = await fetch("./data.json");
-
-        if (!resDraw.ok) throw new Error("JSON Feed Error");
-
-        const dataDraw = await resDraw.json();
-
-        setLatestDraw(dataDraw);
+        setLatestDraw(await fetchJson(LATEST_DRAW_FEED));
         // For history, we either need another JSON or fallback to Mock. 
         // Re-enabling Mock History for stats since user only asked for latest draw JSON.
         // In a real app we'd export history.json too.

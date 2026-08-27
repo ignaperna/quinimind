@@ -1,8 +1,9 @@
 
 import pandas as pd
 import random
-from sqlalchemy.orm import sessionmaker
-from database import engine, Sorteo
+from constants import ALL_NUMBERS, NUMBERS_PER_DRAW
+from database import engine
+import draws
 
 def get_data(modalidad):
     """Loads draw data for a specific modality into a DataFrame."""
@@ -22,11 +23,8 @@ def get_hot_numbers(modalidad, last_n=50):
     # Assuming higher ID = more recent
     df = df.sort_values(by='sorteo_id', ascending=False).head(last_n)
 
-    # Melt the number columns into a single Series
-    numbers = pd.melt(df, value_vars=['n1', 'n2', 'n3', 'n4', 'n5', 'n6'])['value']
-    
-    # Count frequencies
-    hot_counts = numbers.value_counts().head(10)
+    # Count frequencies over the flattened number columns
+    hot_counts = draws.melt_numbers(df).value_counts().head(10)
     return hot_counts.index.tolist()
 
 def get_cold_numbers(modalidad):
@@ -37,25 +35,13 @@ def get_cold_numbers(modalidad):
     if df.empty:
         return []
 
-    # Sort by ID ascending (oldest to newest) to iterate properly
-    df = df.sort_values(by='sorteo_id', ascending=True)
+    last_seen_id, _ = draws.last_seen(df)
 
-    last_seen = {}
-    
-    # Iterate through all draws to update the last seen ID for each number
-    for _, row in df.iterrows():
-        current_id = row['sorteo_id']
-        nums = [row['n1'], row['n2'], row['n3'], row['n4'], row['n5'], row['n6']]
-        for n in nums:
-            last_seen[n] = current_id
-
-    all_numbers = list(range(46)) 
-    
     # Check numbers never seen
-    never_seen = [n for n in all_numbers if n not in last_seen]
+    never_seen = [n for n in ALL_NUMBERS if n not in last_seen_id]
     
     # Check numbers seen but long ago
-    seen_list = [(n, last_seen[n]) for n in last_seen]
+    seen_list = [(n, last_seen_id[n]) for n in last_seen_id]
     seen_list.sort(key=lambda x: x[1]) # Ascending sort by ID
     
     coldest = never_seen + [x[0] for x in seen_list]
@@ -72,27 +58,16 @@ def get_heatmap_data(modalidad):
         return pd.DataFrame()
 
     # 1. Calculate Frequency (Total)
-    melted = pd.melt(df, value_vars=['n1', 'n2', 'n3', 'n4', 'n5', 'n6'])
-    freq_counts = melted['value'].value_counts()
+    freq_counts = draws.melt_numbers(df).value_counts()
 
     # 2. Calculate Last Seen
-    df_sorted = df.sort_values(by='sorteo_id', ascending=True)
-    last_seen_id = {}
-    last_seen_date = {}
-
-    for _, row in df_sorted.iterrows():
-        draw_id = row['sorteo_id']
-        date_val = row['fecha']
-        nums = [row['n1'], row['n2'], row['n3'], row['n4'], row['n5'], row['n6']]
-        for n in nums:
-            last_seen_id[n] = draw_id
-            last_seen_date[n] = date_val
+    last_seen_id, last_seen_date = draws.last_seen(df)
 
     # 3. Build Result DataFrame
     stats = []
     current_max_id = df['sorteo_id'].max()
 
-    for n in range(46):
+    for n in ALL_NUMBERS:
         frec = freq_counts.get(n, 0)
         l_id = last_seen_id.get(n, -1)
         l_date = last_seen_date.get(n, "Nunca")
@@ -118,9 +93,6 @@ def get_prediction(modalidad):
     hot = get_hot_numbers(modalidad)
     cold = get_cold_numbers(modalidad)
     
-    # All possible numbers for random selection
-    all_numbers = list(range(46))
-    
     prediction = set()
     
     # 1. Pick 3 Hot
@@ -132,8 +104,8 @@ def get_prediction(modalidad):
     prediction.update(cold_candidates[:2])
     
     # 3. Fill the rest with Random (need total 6)
-    while len(prediction) < 6:
-        pick = random.choice(all_numbers)
+    while len(prediction) < NUMBERS_PER_DRAW:
+        pick = random.choice(ALL_NUMBERS)
         prediction.add(pick)
         
     return sorted(list(prediction))
