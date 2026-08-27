@@ -1,12 +1,13 @@
 
-from fastapi import FastAPI, HTTPException
+import logging
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import sessionmaker
 from database import engine, Sorteo
 import analisis
 import scrape_quini6
-import pandas as pd
-from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="QuiniMind API", version="1.0.0")
 
@@ -29,10 +30,14 @@ def read_root():
 def trigger_update():
     """Manually triggers the scraper to check for new results."""
     try:
-        scrape_quini6.main()
+        scrape_quini6.run_scraper()
         return {"status": "success", "message": "Database updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except scrape_quini6.ScraperError:
+        logger.exception("Error al actualizar la base de datos desde el scraper")
+        raise HTTPException(status_code=502, detail="Upstream scrape failed")
+    except Exception:
+        logger.exception("Error interno al actualizar la base de datos")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/latest")
 def get_latest_draw():
@@ -43,7 +48,7 @@ def get_latest_draw():
         latest_id = session.query(Sorteo.sorteo_id).order_by(Sorteo.sorteo_id.desc()).first()
         
         if not latest_id:
-            return {"error": "No data found"}
+            raise HTTPException(status_code=404, detail="No draw data available")
             
         sorteo_id = latest_id[0]
         
@@ -70,7 +75,7 @@ def get_latest_draw():
         session.close()
 
 @app.get("/history")
-def get_history(limit: int = 50):
+def get_history(limit: int = Query(50, ge=1, le=500)):
     """Returns history of draws for statistics."""
     session = Session()
     try:
@@ -111,15 +116,23 @@ def get_history(limit: int = 50):
 @app.get("/stats/heatmap")
 def get_heatmap(modalidad: str = "TRADICIONAL"):
     """Returns heatmap data."""
-    df = analisis.get_heatmap_data(modalidad.upper())
-    if df.empty:
-        return []
-    return df.to_dict(orient="records")
+    try:
+        df = analisis.get_heatmap_data(modalidad.upper())
+        if df.empty:
+            return []
+        return df.to_dict(orient="records")
+    except Exception:
+        logger.exception("Error al generar el mapa térmico")
+        raise HTTPException(status_code=500, detail="Unable to generate heatmap")
 
 @app.get("/predict")
 def get_prediction(modalidad: str = "TRADICIONAL"):
     """Generates a prediction."""
-    return analisis.get_prediction(modalidad.upper())
+    try:
+        return analisis.get_prediction(modalidad.upper())
+    except Exception:
+        logger.exception("Error al generar la predicción")
+        raise HTTPException(status_code=500, detail="Unable to generate prediction")
 
 if __name__ == "__main__":
     import uvicorn

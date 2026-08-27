@@ -1,4 +1,4 @@
-
+import logging
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -8,6 +8,8 @@ import numpy as np
 import scrape_quini6
 import analisis
 from database import engine
+
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------
 # 1. CONFIGURACIÓN Y ESTILOS CSS MEJORADOS (V2)
@@ -124,12 +126,13 @@ with st.sidebar:
     if st.button("🔄 Sincronizar DB", use_container_width=True):
         with st.spinner("Conectando al servidor..."):
             try:
-                scrape_quini6.main()
+                scrape_quini6.run_scraper()
                 st.success("¡Datos Actualizados!")
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
-                st.error(f"Error: {e}")
+                logger.exception("Error al sincronizar la base de datos")
+                st.error(f"Error al sincronizar la base de datos: {e}")
 
 # ------------------------------------------------------
 # 3. INTERFAZ PRINCIPAL V2
@@ -260,7 +263,8 @@ with col_pred:
                     </div>
                 """, unsafe_allow_html=True)
             except Exception as e:
-                st.error("Error al generar predicción. Verifica los datos.")
+                logger.exception("Error al generar predicción")
+                st.error(f"Error al generar predicción: {e}. Verifica los datos.")
             
     st.markdown('</div>', unsafe_allow_html=True)
 

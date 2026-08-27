@@ -1,7 +1,9 @@
-
+import logging
 from sqlalchemy import create_engine, Column, Integer, String, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
+logger = logging.getLogger(__name__)
 
 # Database configuration
 DATABASE_URL = "sqlite:///quini6.db"
@@ -55,7 +57,7 @@ def guardar_sorteo(datos):
         ).first()
 
         if exists:
-            print(f"  [DB] Skipped duplicate: Draw {datos['sorteo_id']} - {datos['modalidad']}")
+            logger.info(f"  [DB] Skipped duplicate: Draw {datos['sorteo_id']} - {datos['modalidad']}")
             return
 
         # Create new record
@@ -68,11 +70,12 @@ def guardar_sorteo(datos):
         )
         session.add(nuevo_sorteo)
         session.commit()
-        print(f"  [DB] Saved: Draw {datos['sorteo_id']} - {datos['modalidad']}")
+        logger.info(f"  [DB] Saved: Draw {datos['sorteo_id']} - {datos['modalidad']}")
 
-    except Exception as e:
-        print(f"  [DB] Error saving: {e}")
+    except Exception:
+        logger.exception(f"  [DB] Error saving draw {datos.get('sorteo_id')} - {datos.get('modalidad')}")
         session.rollback()
+        raise
     finally:
         session.close()
 

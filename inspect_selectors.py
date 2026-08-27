@@ -1,4 +1,4 @@
-
+import sys
 import requests
 from bs4 import BeautifulSoup
 
@@ -32,3 +32,4 @@ try:
 
 except Exception as e:
     print(f"Error: {e}")
+    sys.exit(1)
