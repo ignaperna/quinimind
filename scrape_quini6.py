@@ -147,7 +147,10 @@ def run_scraper():
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
-        exit(1)
+        raise
 
 if __name__ == "__main__":
-    run_scraper()
+    try:
+        run_scraper()
+    except Exception:
+        exit(1)

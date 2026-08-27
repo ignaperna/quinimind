@@ -1,0 +1,5 @@
+-r requirements.txt
+fastapi
+httpx
+pytest
+pytest-cov
