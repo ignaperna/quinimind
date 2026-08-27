@@ -29,7 +29,7 @@ def read_root():
 def trigger_update():
     """Manually triggers the scraper to check for new results."""
     try:
-        scrape_quini6.main()
+        scrape_quini6.run_scraper()
         return {"status": "success", "message": "Database updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
