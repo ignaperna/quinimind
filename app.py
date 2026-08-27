@@ -124,7 +124,7 @@ with st.sidebar:
     if st.button("🔄 Sincronizar DB", use_container_width=True):
         with st.spinner("Conectando al servidor..."):
             try:
-                scrape_quini6.main()
+                scrape_quini6.run_scraper()
                 st.success("¡Datos Actualizados!")
                 time.sleep(1)
                 st.rerun()
