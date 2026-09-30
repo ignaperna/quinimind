@@ -1,13 +1,11 @@
 
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
-import random
 import time
 import numpy as np
 import scrape_quini6
 import analisis
-from database import engine
+from constants import MODALIDADES
 
 # ------------------------------------------------------
 # 1. CONFIGURACIÓN Y ESTILOS CSS MEJORADOS (V2)
@@ -118,13 +116,23 @@ st.markdown("""
 # 2. FUNCIONES (MOCKUP MEJORADO -> INTEGRACIÓN REAL)
 # ------------------------------------------------------
 
+def render_metric(titulo, valor, color, glow_rgba, leyenda, css_class):
+    """Renders one of the neon trend metrics (hot/cold)."""
+    st.markdown(f'<div style="text-align:center;">{titulo}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size: 3.5rem; font-weight:900; text-align:center; '
+        f'color:{color}; text-shadow: 0 0 20px {glow_rgba};">{valor}</div>',
+        unsafe_allow_html=True
+    )
+    st.markdown(f'<div style="text-align:center;" class="{css_class}">{leyenda}</div>', unsafe_allow_html=True)
+
 # --- Sidebar Control for DB Update ---
 with st.sidebar:
     st.header("⚙️ Admin")
     if st.button("🔄 Sincronizar DB", use_container_width=True):
         with st.spinner("Conectando al servidor..."):
             try:
-                scrape_quini6.main()
+                scrape_quini6.run_scraper()
                 st.success("¡Datos Actualizados!")
                 time.sleep(1)
                 st.rerun()
@@ -150,7 +158,7 @@ st.markdown('<div class="glass-card"><h3>🔥 Mapa Térmico de Frecuencias (Hist
 st.markdown('<p style="color:#E0E0E0">Análisis visual del comportamiento histórico de las bolillas en base a datos reales.</p>', unsafe_allow_html=True)
 
 # Selectbox para el Heatmap (usando el estilo corregido)
-heatmap_modalidad = st.selectbox("Seleccionar Modalidad de Análisis:", ["TRADICIONAL", "LA SEGUNDA", "REVANCHA", "SIEMPRE SALE"])
+heatmap_modalidad = st.selectbox("Seleccionar Modalidad de Análisis:", MODALIDADES)
 
 # DATOS REALES
 df_freq = analisis.get_heatmap_data(heatmap_modalidad)
@@ -224,7 +232,7 @@ with col_pred:
     
     # Usamos radio horizontal
     pred_modalidad = st.radio("Modalidad Objetivo:", 
-                         ["TRADICIONAL", "LA SEGUNDA", "REVANCHA", "SIEMPRE SALE"],
+                         MODALIDADES,
                          horizontal=True)
     
     st.write("") # Espacio
@@ -278,13 +286,11 @@ with col_stats:
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown('<div style="text-align:center;">Isótopo 🔥 (Más sale)</div>', unsafe_allow_html=True)
-        st.markdown(f'<div style="font-size: 3.5rem; font-weight:900; text-align:center; color:#FF4B2B; text-shadow: 0 0 20px rgba(255, 75, 43, 0.8);">{val_hot}</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center;" class="neon-metric-hot">↑ Alta Frecuencia</div>', unsafe_allow_html=True)
+        render_metric("Isótopo 🔥 (Más sale)", val_hot, "#FF4B2B", "rgba(255, 75, 43, 0.8)",
+                      "↑ Alta Frecuencia", "neon-metric-hot")
     with c2:
-        st.markdown('<div style="text-align:center;">Criogénico ❄️ (No sale)</div>', unsafe_allow_html=True)
-        st.markdown(f'<div style="font-size: 3.5rem; font-weight:900; text-align:center; color:#00d4ff; text-shadow: 0 0 20px rgba(0, 212, 255, 0.8);">{val_cold}</div>', unsafe_allow_html=True)
-        st.markdown('<div style="text-align:center;" class="neon-metric-cold">↓ Retraso Alto</div>', unsafe_allow_html=True)
+        render_metric("Criogénico ❄️ (No sale)", val_cold, "#00d4ff", "rgba(0, 212, 255, 0.8)",
+                      "↓ Retraso Alto", "neon-metric-cold")
 
     st.divider()
     st.markdown("**Confianza del Algoritmo:**")

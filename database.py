@@ -1,7 +1,11 @@
 
+from contextlib import contextmanager
+
 from sqlalchemy import create_engine, Column, Integer, String, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
+from constants import NUMBER_COLUMNS
 
 # Database configuration
 DATABASE_URL = "sqlite:///quini6.db"
@@ -34,6 +38,15 @@ class Sorteo(Base):
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+@contextmanager
+def session_scope():
+    """Yields a session and always closes it afterwards."""
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
 def init_db():
     """Initializes the database tables."""
     Base.metadata.create_all(bind=engine)
@@ -46,35 +59,32 @@ def guardar_sorteo(datos):
     Args:
         datos (dict): Dictionary containing draw data.
     """
-    session = SessionLocal()
-    try:
-        # Check if already exists
-        exists = session.query(Sorteo).filter_by(
-            sorteo_id=datos['sorteo_id'],
-            modalidad=datos['modalidad']
-        ).first()
+    with session_scope() as session:
+        try:
+            # Check if already exists
+            exists = session.query(Sorteo).filter_by(
+                sorteo_id=datos['sorteo_id'],
+                modalidad=datos['modalidad']
+            ).first()
 
-        if exists:
-            print(f"  [DB] Skipped duplicate: Draw {datos['sorteo_id']} - {datos['modalidad']}")
-            return
+            if exists:
+                print(f"  [DB] Skipped duplicate: Draw {datos['sorteo_id']} - {datos['modalidad']}")
+                return
 
-        # Create new record
-        nuevo_sorteo = Sorteo(
-            fecha=datos['fecha'],
-            sorteo_id=datos['sorteo_id'],
-            modalidad=datos['modalidad'],
-            n1=datos['n1'], n2=datos['n2'], n3=datos['n3'],
-            n4=datos['n4'], n5=datos['n5'], n6=datos['n6']
-        )
-        session.add(nuevo_sorteo)
-        session.commit()
-        print(f"  [DB] Saved: Draw {datos['sorteo_id']} - {datos['modalidad']}")
+            # Create new record
+            nuevo_sorteo = Sorteo(
+                fecha=datos['fecha'],
+                sorteo_id=datos['sorteo_id'],
+                modalidad=datos['modalidad'],
+                **{col: datos[col] for col in NUMBER_COLUMNS}
+            )
+            session.add(nuevo_sorteo)
+            session.commit()
+            print(f"  [DB] Saved: Draw {datos['sorteo_id']} - {datos['modalidad']}")
 
-    except Exception as e:
-        print(f"  [DB] Error saving: {e}")
-        session.rollback()
-    finally:
-        session.close()
+        except Exception as e:
+            print(f"  [DB] Error saving: {e}")
+            session.rollback()
 
 # Initialize tables on import
 init_db()

@@ -1,12 +1,11 @@
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import sessionmaker
-from database import engine, Sorteo
+from constants import DEFAULT_MODALIDAD, NUMBERS_PER_DRAW
+from database import Sorteo, session_scope
 import analisis
+import draws
 import scrape_quini6
-import pandas as pd
-from typing import List, Dict, Any
 
 app = FastAPI(title="QuiniMind API", version="1.0.0")
 
@@ -19,8 +18,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Session = sessionmaker(bind=engine)
-
 @app.get("/")
 def read_root():
     return {"status": "online", "system": "QuiniMind AI"}
@@ -29,7 +26,7 @@ def read_root():
 def trigger_update():
     """Manually triggers the scraper to check for new results."""
     try:
-        scrape_quini6.main()
+        scrape_quini6.run_scraper()
         return {"status": "success", "message": "Database updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -37,8 +34,7 @@ def trigger_update():
 @app.get("/latest")
 def get_latest_draw():
     """Returns the most recent draw (sorteo) with all modalities."""
-    session = Session()
-    try:
+    with session_scope() as session:
         # Assuming higher ID is newer. We need to group by ID.
         latest_id = session.query(Sorteo.sorteo_id).order_by(Sorteo.sorteo_id.desc()).first()
         
@@ -48,32 +44,23 @@ def get_latest_draw():
         sorteo_id = latest_id[0]
         
         # Get all entries for this ID (different modalities)
-        draws = session.query(Sorteo).filter(Sorteo.sorteo_id == sorteo_id).all()
+        sorteos = session.query(Sorteo).filter(Sorteo.sorteo_id == sorteo_id).all()
         
         result = {
             "id": sorteo_id,
-            "date": draws[0].fecha if draws else "Unknown",
+            "date": sorteos[0].fecha if sorteos else "Unknown",
             "modes": {}
         }
         
-        for draw in draws:
-            # Normalize modality name to camelCase key
-            key = "tradicional"
-            if "SEGUNDA" in draw.modalidad.upper(): key = "laSegunda"
-            elif "REVANCHA" in draw.modalidad.upper(): key = "revancha"
-            elif "SIEMPRE" in draw.modalidad.upper(): key = "siempreSale"
-            
-            result["modes"][key] = [draw.n1, draw.n2, draw.n3, draw.n4, draw.n5, draw.n6]
+        for sorteo in sorteos:
+            result["modes"][draws.mode_key(sorteo.modalidad)] = draws.numbers_of_sorteo(sorteo)
             
         return result
-    finally:
-        session.close()
 
 @app.get("/history")
 def get_history(limit: int = 50):
     """Returns history of draws for statistics."""
-    session = Session()
-    try:
+    with session_scope() as session:
         # Get distinct draw IDs ordered descending
         unique_ids = session.query(Sorteo.sorteo_id, Sorteo.fecha).distinct().order_by(Sorteo.sorteo_id.desc()).limit(limit).all()
         
@@ -81,10 +68,10 @@ def get_history(limit: int = 50):
         for sid, date in unique_ids:
             # For stats, we usually aggregate numbers from all modalities or just Tradicional
             # Let's aggregate all numbers for this draw ID into one flat list for simplicity in this visualizer
-            draws = session.query(Sorteo).filter(Sorteo.sorteo_id == sid).all()
+            sorteos = session.query(Sorteo).filter(Sorteo.sorteo_id == sid).all()
             all_numbers = []
-            for d in draws:
-                all_numbers.extend([d.n1, d.n2, d.n3, d.n4, d.n5, d.n6])
+            for sorteo in sorteos:
+                all_numbers.extend(draws.numbers_of_sorteo(sorteo))
             
             # Remove duplicates if any (unlikely across modalities but possible)
             # Actually for frequency stats we keep them all.
@@ -92,11 +79,11 @@ def get_history(limit: int = 50):
             # The User's React code expects `numbers: [...]` (Array of 6).
             # It seems the mockup history was just random 6 numbers.
             # Let's return just the Tradicional numbers as the "representative" set for the history list view.
-            trad = next((d for d in draws if "TRADICIONAL" in d.modalidad.upper()), None)
+            trad = next((s for s in sorteos if "TRADICIONAL" in s.modalidad.upper()), None)
             if trad:
-                nums = [trad.n1, trad.n2, trad.n3, trad.n4, trad.n5, trad.n6]
+                nums = draws.numbers_of_sorteo(trad)
             else:
-                nums = all_numbers[:6] # Fallback
+                nums = all_numbers[:NUMBERS_PER_DRAW] # Fallback
                 
             history.append({
                 "id": sid,
@@ -105,11 +92,9 @@ def get_history(limit: int = 50):
             })
             
         return history
-    finally:
-        session.close()
 
 @app.get("/stats/heatmap")
-def get_heatmap(modalidad: str = "TRADICIONAL"):
+def get_heatmap(modalidad: str = DEFAULT_MODALIDAD):
     """Returns heatmap data."""
     df = analisis.get_heatmap_data(modalidad.upper())
     if df.empty:
@@ -117,7 +102,7 @@ def get_heatmap(modalidad: str = "TRADICIONAL"):
     return df.to_dict(orient="records")
 
 @app.get("/predict")
-def get_prediction(modalidad: str = "TRADICIONAL"):
+def get_prediction(modalidad: str = DEFAULT_MODALIDAD):
     """Generates a prediction."""
     return analisis.get_prediction(modalidad.upper())
 

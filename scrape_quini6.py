@@ -5,12 +5,27 @@ import os
 import re
 from datetime import datetime
 
+from constants import MAX_NUMBER, MODE_KEYS, NUMBERS_PER_DRAW
+
 # URL objetivo
 URL = "https://www.quini-6-resultados.com.ar/"
 
 def limpiar_numero(texto):
     """Extrae solo los dígitos de un texto"""
     return int(re.sub(r'\D', '', texto))
+
+def agregar_numeros(texto, numeros):
+    """
+    Agrega a `numeros` las bolillas válidas encontradas en `texto`,
+    aceptando tanto "05 - 10 - 12" como un número suelto. Evita duplicados.
+    """
+    for parte in texto.split('-'):
+        parte = parte.strip()
+        if not re.match(r'^\d{1,2}$', parte):
+            continue
+        valor = int(parte)
+        if valor <= MAX_NUMBER and valor not in numeros:
+            numeros.append(valor)
 
 def run_scraper():
     print(f"⚡ Iniciando scraping de {URL} con Cloudscraper...")
@@ -59,24 +74,12 @@ def run_scraper():
         print(f"📅 Detectado: Sorteo {sorteo_id} del {sorteo_date}")
 
         # 2. Extraer Números por Modalidad
-        modes_data = {
-            "tradicional": [],
-            "laSegunda": [],
-            "revancha": [],
-            "siempreSale": []
-        }
-
-        keywords = {
-            "TRADICIONAL": "tradicional",
-            "LA SEGUNDA": "laSegunda",
-            "REVANCHA": "revancha",
-            "SIEMPRE SALE": "siempreSale"
-        }
+        modes_data = {json_key: [] for json_key in MODE_KEYS.values()}
         
         # Strategy: Find the keyword (usually in strong/b/h3), then scan next elements/strings for numbers.
         # Numbers might be dash separated "05 - 10 - ..." or individual in text pointers.
         
-        for key_text, json_key in keywords.items():
+        for key_text, json_key in MODE_KEYS.items():
             # Find the element containing the text
             target_node = soup.find(string=re.compile(re.escape(key_text), re.IGNORECASE))
             
@@ -102,25 +105,12 @@ def run_scraper():
                         if not txt:
                             continue
                         
-                        # Check for dash separated
-                        if '-' in txt:
-                            parts = txt.split('-')
-                            for p in parts:
-                                p_clean = p.strip()
-                                if re.match(r'^\d{1,2}$', p_clean):
-                                    val = int(p_clean)
-                                    if val <= 45 and val not in numeros_encontrados:
-                                        numeros_encontrados.append(val)
-                        # Check for single number
-                        elif re.match(r'^\d{1,2}$', txt):
-                            val = int(txt)
-                            if val <= 45 and val not in numeros_encontrados:
-                                numeros_encontrados.append(val)
+                        agregar_numeros(txt, numeros_encontrados)
                     
-                    if len(numeros_encontrados) >= 6:
+                    if len(numeros_encontrados) >= NUMBERS_PER_DRAW:
                         break
                 
-                modes_data[json_key] = sorted(numeros_encontrados[:6])
+                modes_data[json_key] = sorted(numeros_encontrados[:NUMBERS_PER_DRAW])
                 print(f"   -> {key_text}: {modes_data[json_key]}")
             else:
                 print(f"⚠️ No se encontró la etiqueta para {key_text}")
@@ -147,7 +137,10 @@ def run_scraper():
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
-        exit(1)
+        raise
 
 if __name__ == "__main__":
-    run_scraper()
+    try:
+        run_scraper()
+    except Exception:
+        exit(1)
