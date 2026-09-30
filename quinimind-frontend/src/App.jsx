@@ -228,16 +228,25 @@ const StatsSection = ({ history, loading }) => {
 
 const PredictionEngine = ({ isPro, onUpgrade }) => {
   const [prediction, setPrediction] = useState(null);
+  const [predictionError, setPredictionError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const generatePrediction = async () => {
     setLoading(true);
+    setPredictionError(null);
     try {
       const res = await fetch(`${API_URL}/predict`);
+      if (!res.ok) {
+        throw new Error(`Prediction request failed with status ${res.status}`);
+      }
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error('Prediction response must be an array');
+      }
       setPrediction(data);
     } catch (err) {
       console.error(err);
+      setPredictionError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -279,6 +288,12 @@ const PredictionEngine = ({ isPro, onUpgrade }) => {
                   {prediction.map((n) => (
                     <NumberBall key={n} number={n} type="prediction" />
                   ))}
+                </div>
+              )}
+
+              {predictionError && (
+                <div role="alert" className="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  No se pudo generar la predicción: {predictionError}
                 </div>
               )}
 

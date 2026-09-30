@@ -1,13 +1,13 @@
 
 import pandas as pd
 import random
-from sqlalchemy.orm import sessionmaker
-from database import engine, Sorteo
+from sqlalchemy import text
+from database import engine
 
 def get_data(modalidad):
     """Loads draw data for a specific modality into a DataFrame."""
-    query = f"SELECT * FROM sorteos WHERE modalidad = '{modalidad}'"
-    df = pd.read_sql(query, engine)
+    query = text("SELECT * FROM sorteos WHERE modalidad = :modalidad")
+    df = pd.read_sql(query, engine, params={"modalidad": modalidad})
     return df
 
 def get_hot_numbers(modalidad, last_n=50):
