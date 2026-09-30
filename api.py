@@ -1,5 +1,8 @@
+import hmac
+import logging
+import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import sessionmaker
 from database import engine, Sorteo
@@ -11,11 +14,19 @@ from typing import List, Dict, Any
 app = FastAPI(title="QuiniMind API", version="1.0.0")
 
 # Enable CORS
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "QUINIMIND_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for dev
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -25,14 +36,26 @@ Session = sessionmaker(bind=engine)
 def read_root():
     return {"status": "online", "system": "QuiniMind AI"}
 
-@app.get("/update")
-def trigger_update():
+@app.post("/update")
+def trigger_update(authorization: str | None = Header(default=None)):
     """Manually triggers the scraper to check for new results."""
+    admin_token = os.getenv("QUINIMIND_ADMIN_TOKEN")
+    if not admin_token:
+        raise HTTPException(status_code=503, detail="Update endpoint is not configured")
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    provided_token = authorization.removeprefix("Bearer ")
+    if not provided_token or not hmac.compare_digest(provided_token, admin_token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
-        scrape_quini6.main()
+        scrape_quini6.run_scraper()
         return {"status": "success", "message": "Database updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logging.exception("Update failed")
+        raise HTTPException(status_code=500, detail="Update failed")
 
 @app.get("/latest")
 def get_latest_draw():
@@ -70,7 +93,7 @@ def get_latest_draw():
         session.close()
 
 @app.get("/history")
-def get_history(limit: int = 50):
+def get_history(limit: int = Query(50, ge=1, le=500)):
     """Returns history of draws for statistics."""
     session = Session()
     try:
@@ -108,10 +131,17 @@ def get_history(limit: int = 50):
     finally:
         session.close()
 
+def _validate_modalidad(modalidad: str) -> str:
+    modalidad = modalidad.upper()
+    if modalidad not in analisis.MODALIDADES:
+        raise HTTPException(status_code=400, detail="Invalid modalidad")
+    return modalidad
+
+
 @app.get("/stats/heatmap")
 def get_heatmap(modalidad: str = "TRADICIONAL"):
     """Returns heatmap data."""
-    df = analisis.get_heatmap_data(modalidad.upper())
+    df = analisis.get_heatmap_data(_validate_modalidad(modalidad))
     if df.empty:
         return []
     return df.to_dict(orient="records")
@@ -119,7 +149,7 @@ def get_heatmap(modalidad: str = "TRADICIONAL"):
 @app.get("/predict")
 def get_prediction(modalidad: str = "TRADICIONAL"):
     """Generates a prediction."""
-    return analisis.get_prediction(modalidad.upper())
+    return analisis.get_prediction(_validate_modalidad(modalidad))
 
 if __name__ == "__main__":
     import uvicorn

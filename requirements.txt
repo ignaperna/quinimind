@@ -5,3 +5,7 @@ pandas
 streamlit
 altair
 cloudscraper
+fastapi
+uvicorn
+plotly
+numpy
